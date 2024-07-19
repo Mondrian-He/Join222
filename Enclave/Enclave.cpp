@@ -38,6 +38,7 @@
 #include "BIGSI.h"
 #include "CSCBF.h"
 #include "Ocall_wrappers.h"
+#include "ObliviousSort.h"
 
 #include <stdarg.h>
 #include <stdio.h> /* vsnprintf */
@@ -243,7 +244,7 @@ void ecall_joinsearch1(char** ein1,char** ein2,void* mbdes,char** mbpool)
         string enindex1 = ein1[p1];
         string p1_decode_base64 = base64_decode(enindex1);
 	    string p1_decode = aes_256_cbc_decode(cbc_key2,iv1, p1_decode_base64);
-        index1.push_back(p1_decode);
+        index1.push_back(p1_decode);//是一个string的vector
         baseline_bigsi.insertion(0,p1_decode);
     }
 
@@ -580,6 +581,7 @@ void ecall_joinsearch2(char** ein0,char** ein1,char** ein2,char** ein3,char** ei
 
     clock_t s2,e2;
     s2 = sgx_clock();
+    
 
 
     char *enumber = new char[25];
@@ -615,40 +617,314 @@ void ecall_joinsearch2(char** ein0,char** ein1,char** ein2,char** ein3,char** ei
     ocall_read_eneq1(&len1,ein1);
     map<string,int> result1;
 
+    // 设置两个bool类型的vector
+    vector<bool> ResultVector_0(len0, false);
+    vector<bool> ResultVector_1(len1, false);
+
+    // 分别存储表0和表1的p_decode
+    vector<string> p_decode_0(len0);
+    vector<string> p_decode_1(len1);
+
+    vector<string> IntersectResult_0;
+    vector<string> IntersectResult_1;
+
+
+    int count;
+
+    
+
+
     for(int p=0;p<len0;p++)
     {
         string enindex = ein0[p];
         string p_decode_base64 = base64_decode(enindex);
 	    string p_decode = aes_256_cbc_decode(cbc_key2,iv0,p_decode_base64);
-        index.push_back(p_decode);   
-        printf("index0:%s\n",p_decode);    
+        // index.push_back(p_decode);//string vector   
+        // 存起来
+        p_decode_0[p] = p_decode;
+        //打印标签及其p_decode=========================================================================================
+        // printf("index0:%s\n",p_decode);    
         cscbf.insertion(to_string(0),p_decode);
     }
+     // 打印len0的值
+    printf("len0: %d\n", len0);
+
+
+    // // Print all elements of IntersectResult_0 in a single line
+    // printf("p_decode_0 elements: ");
+    // for (const auto& elem : p_decode_0) {
+    //     printf("%s, ", elem.c_str());
+    // }
+    // printf("\n");
 
     if(num == 2){
+        int count_test1=0;//测试交集个数
+         // 打印len0的值
+        printf("len1: %d\n", len0);
         for(int p=0;p<len1;p++)
         {
             string enindex = ein1[p];
             string p_decode_base64 = base64_decode(enindex);
             string p_decode = aes_256_cbc_decode(cbc_key2,iv1, p_decode_base64);
-            printf("index1:%s\n",p_decode);       	    
+             //打印标签及其p_decode=========================================================================================
+            // printf("index1:%s\n",p_decode);  
+            // 存起来
+            p_decode_1[p] = p_decode;     	    
             cscbf.insertion(to_string(1),p_decode);
 
-            int res = 1;
-            for (int set_ID = 1; set_ID < num; set_ID++)
+            
+            if (cscbf.obfquery(0, p_decode) == 1)
             {
-                // int cscbf_res = cscbf.query(set_ID,p_decode);
-                int cscbf_res = cscbf.obfquery(set_ID,p_decode);
-                res &= cscbf_res;
-                if(!res){
-                    break;
-                }
-                    
-            }
-            if(res){
+                ResultVector_1[p] = 1;
                 result1[p_decode] = p;
+                count_test1++;
+            }
+
+           
+
+            // int res = 1;
+            // for (int set_ID = 1; set_ID < num; set_ID++)
+            // {
+            //     // int cscbf_res = cscbf.query(set_ID,p_decode);
+            //     int cscbf_res = cscbf.obfquery(set_ID,p_decode);
+            //     res &= cscbf_res;
+            //     if(!res){
+            //         break;
+            //     }
+                    
+            // }
+            // if(res){
+            //     result1[p_decode] = p;
+            // }
+        }
+         // 打印 交集个数 的值
+        printf("交集个数: %d\n", count_test1);
+        printf("p_decode_1 elements: ");
+        for (const auto& elem : p_decode_1) {
+            printf("%s, ", elem.c_str());
+        }
+        printf("\n");
+
+        int count_test0=0;
+        // 验证集合0的是否在集合1当中
+        for (int p = 0; p < len0; p++)
+        {
+            string p_decode = p_decode_0[p];
+            if (cscbf.obfquery(1, p_decode) == 1)
+            {
+                ResultVector_0[p] = 1;
+                result0[p_decode] = p;
+                count_test0++;
             }
         }
+        // 打印 交集个数 的值
+        printf("交集个数: %d\n", count_test0);
+
+
+        // Oblivious Selection
+        vector<string> Result_0;
+        vector<string> Result_1;
+        int count_test3=0;
+        for (int p = 0; p < len0; p++)
+        {
+            if (ResultVector_0[p])
+            {
+                Result_0.push_back(p_decode_0[p]);
+                count_test3++;
+
+            }
+            else
+                Result_0.push_back("0"); // 如果 ResultVector_0[p] 为 0，则推入字符串 "0"
+        }
+        // 打印 交集个数 的值
+        printf("Result0交集个数: %d\n", count_test3);
+
+        // // Print all elements of IntersectResult_1 in a single line
+        //     printf("Result_0: ");
+        //     for (const auto& elem : Result_0) {
+        //         printf("%s, ", elem.c_str());
+        //     }
+        //     printf("\n");
+
+        vector<pair<string, int>> F_0;
+        count = 0; // 记录交集元素的数量，最终数量应该是count+1
+        for (int k = 0; k < Result_0.size(); k++)
+        {
+            if (Result_0[k] != "0")
+            {
+                F_0.push_back(make_pair(Result_0[k], count));
+                count++;
+            }
+            else
+            {
+                F_0.push_back(make_pair("000", -1)); // 如果是0，那么就推入000||-1
+            }
+        }
+        // 打印 F0.size 的值
+        printf("F0: %d\n", F_0.size());  
+        // 打印 count 的值
+        printf("Count in Set0: %d\n", count);  
+        int chunknumber = F_0.size() / (count)+1; // 记得加1，相当于向上取整
+        printf("chunknumber: %d\n", chunknumber);  
+        vector<vector<pair<string, int>>> Chunks0(chunknumber);
+
+        // 分块处理
+        for (int h = 0; h < chunknumber; h++)
+            for (int j = 0; (j < count) && (h * (count) + j < F_0.size()); j++)
+            {
+                Chunks0[h].push_back(F_0[h * (count) + j]);
+            }
+
+        //  给最后一个不满的chunk填充0
+        while (Chunks0.back().size() < count) // 定位到Chunks中最后一个Chunk的size
+        {
+            Chunks0.back().push_back(make_pair("000", -1));
+        }
+        
+        // //打印chunk0
+        // for (int h = 0; h < chunknumber; h++)
+        // {
+        //     printf("Chunk %d before Oblivious Sort:\n", h);
+        // for (const auto& elem : Chunks0[h])
+        //     {   
+        //         printf("(%s, %d) ", elem.first.c_str(), elem.second);
+        //     }
+        //     printf("\n");
+        // }
+
+        // 进行Oblivious Sort
+        for (int h = 0; h < chunknumber; h++)
+        {
+            Oblivious(Chunks0[h], count);//s=======================是count还是count+1
+            //         // 打印排序后的每个Chunk的内容
+            // printf("Chunk %d after Oblivious Sort:\n", h);
+            // for (const auto& elem : Chunks0[h])
+            // {
+            //     printf("(%s, %d) ", elem.first.c_str(), elem.second);
+            // }
+            // printf("\n");
+        }
+
+        // 从每个块中选择不为0的元素
+        IntersectResult_0.resize(count, "0");
+
+        for (int h = 0; h < chunknumber; h++)
+            for (int l = 0; l < count; l++)
+            {
+                if (Chunks0[h][l].first != "000" && IntersectResult_0[l] == "0")
+                {
+                    IntersectResult_0[l] = Chunks0[h][l].first; // 直接在对应位置更新值
+                }
+            }
+
+        for (int p = 0; p < len1; p++)
+        {
+            if (ResultVector_1[p])
+                Result_1.push_back(p_decode_1[p]);
+            else
+                Result_1.push_back("0");
+        }
+
+        vector<pair<string, int>> F_1;
+        count = 0; // 记录交集元素的数量，最终数量应该是count+1
+        for (int k = 0; k < Result_1.size(); k++)
+        {
+            if (Result_1[k] != "0")
+            {
+                F_1.push_back(make_pair(Result_1[k], count));
+                count++;
+            }
+            else
+            {
+                F_1.push_back(make_pair("000", -1)); // 如果是0，那么就推入000||-1
+            }
+        }
+        // 打印 count 的值
+        printf("Count in Set1: %d\n", count);
+        chunknumber = F_1.size() / (count)+1; // 记得加1，相当于向上取整
+                // 打印F_1每个元素的内容
+        printf("Elements of F_1:\n");
+        for (const auto& elem : F_1)
+        {
+            printf("(%s, %d) ", elem.first.c_str(), elem.second);
+        }
+        printf("\n");
+
+
+
+
+        vector<vector<pair<string, int>>> Chunks1(chunknumber);
+
+        // 分块处理
+        for (int h = 0; h < chunknumber; h++)
+            for (int j = 0; (j < count) && (h * (count) + j < F_1.size()); j++)
+            {
+                Chunks1[h].push_back(F_1[h * (count) + j]);
+            }
+
+        //  给最后一个不满的chunk填充0
+        while (Chunks1.back().size() < count) // 定位到Chunks中最后一个Chunk的size
+        {
+            Chunks1.back().push_back(make_pair("000", -1));
+        }
+
+
+         //打印chunk1
+        for (int h = 0; h < chunknumber; h++)
+        {
+            printf("Chunk %d before Oblivious Sort:\n", h);
+        for (const auto& elem : Chunks1[h])
+            {   
+                printf("(%s, %d) ", elem.first.c_str(), elem.second);
+            }
+            printf("\n");
+        }
+
+        // 进行Oblivious Sort
+        for (int h = 0; h < chunknumber; h++)
+        {
+            Oblivious(Chunks1[h], count);
+            printf("Chunk %d after Oblivious Sort:\n", h);
+            for (const auto& elem : Chunks1[h])
+            {
+                printf("(%s, %d) ", elem.first.c_str(), elem.second);
+            }
+            printf("\n");
+        }
+
+
+
+        // 从每个块中选择不为0的元素
+        IntersectResult_1.resize(count, "0");
+
+        for (int h = 0; h < chunknumber; h++)
+            for (int l = 0; l < count; l++)
+            {
+                if (Chunks1[h][l].first != "000" && IntersectResult_1[l] == "0")
+                {
+                    IntersectResult_1[l] = Chunks1[h][l].first; // 直接在对应位置更新值
+                }
+            }
+
+
+            // Print all elements of IntersectResult_0 in a single line
+            printf("IntersectResult_0 elements: ");
+            for (const auto& elem : IntersectResult_0) {
+                printf("%s, ", elem.c_str());
+            }
+            printf("\n");
+
+            // Print all elements of IntersectResult_1 in a single line
+            printf("IntersectResult_1 elements: ");
+            for (const auto& elem : IntersectResult_1) {
+                printf("%s, ", elem.c_str());
+            }
+            printf("\n");
+
+
+
+
+
     }       
 
     if(num == 3 || num == 5 || num == 10){
@@ -809,32 +1085,63 @@ void ecall_joinsearch2(char** ein0,char** ein1,char** ein2,char** ein3,char** ei
         }
     }
 
-    for(int j=0;j<index.size();j++)
-    {
-	    if(result1.find(index[j]) != result1.end())
-            result0[index[j]] = j;
-        
-    }
 
-    unordered_map<string,int> HTE;
-    for(auto h1 : result0)
+    // 定义最终结果集
+    vector<pair<int, int>> FinalResult(count, make_pair(0, 0));
+    int k;
+
+    for (auto fi : IntersectResult_0)
     {
-        HTE[h1.first] = h1.second;
-    }
-    for(auto h2 : result1)
-    {
-        if(HTE.find(h2.first) != HTE.end())
+        k = 0;
+        if (result0.find(fi) != result0.end())
         {
-            storage2.push_back(pair<int,int>(HTE[h2.first],h2.second));
-            //测试的时候注释掉
-            ocall_write_result(atoi(h2.first.c_str()));
-            ocall_writeendl_result();
+            for (auto fj : IntersectResult_1)
+            {
+                if ((result1.find(fj) != result1.end()) && (fi == fj) && (FinalResult[k] == make_pair(0, 0)))
+                {
+                    FinalResult[k] = make_pair(result0[fi], result1[fj]);
+                    // // 打印出 fj 的值
+                    // printf("fj:\n");
+                    // printf("fj: %s", fj.c_str());
+                    ocall_write_result(atoi(fj.c_str()));
+                    ocall_writeendl_result();
+                }
+                k++; // 遍历最终结果集
+            }
         }
     }
-
     e2 = sgx_clock();
     printf("\nsbf执行时间: %f us\n", (double)((e2 - s2)));
-
     ocall_close_enquery();
     ocall_close_result();
+
+    // //index存的就是p_decode
+    // for(int j=0;j<index.size();j++)
+    // {
+	//     if(result1.find(index[j]) != result1.end())
+    //         result0[index[j]] = j;
+        
+    // }
+
+    // unordered_map<string,int> HTE;
+    // for(auto h1 : result0)
+    // {
+    //     HTE[h1.first] = h1.second;
+    // }
+    // for(auto h2 : result1)
+    // {
+    //     if(HTE.find(h2.first) != HTE.end())
+    //     {
+    //         storage2.push_back(pair<int,int>(HTE[h2.first],h2.second));
+    //         //测试的时候注释掉
+    //         ocall_write_result(atoi(h2.first.c_str()));
+    //         ocall_writeendl_result();
+    //     }
+    // }
+
+    // e2 = sgx_clock();
+    // printf("\nsbf执行时间: %f us\n", (double)((e2 - s2)));
+
+    // ocall_close_enquery();
+    // ocall_close_result();
 }
